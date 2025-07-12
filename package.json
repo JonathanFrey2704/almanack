@@ -1,27 +1,19 @@
 {
   "name": "almanack",
-  "version": "0.1.0",
-  "private": true,
+  "version": "1.0.0",
+  "description": "Almanack application with Next.js frontend and FastAPI backend",
   "scripts": {
-    "dev": "next dev",
-    "build": "next build",
-    "start": "next start",
-    "lint": "next lint"
-  },
-  "dependencies": {
-    "react": "^19.0.0",
-    "react-dom": "^19.0.0",
-    "next": "15.3.5"
+    "dev": "concurrently \"npm run dev:frontend\" \"npm run dev:backend\"",
+    "dev:frontend": "cd frontend && npm run dev",
+    "dev:backend": "cd backend && python main.py",
+    "build": "cd frontend && npm run build",
+    "start": "cd frontend && npm start",
+    "install:all": "npm install && cd frontend && npm install && cd ../backend && pip install -r requirements.txt"
   },
   "devDependencies": {
-    "typescript": "^5",
-    "@types/node": "^20",
-    "@types/react": "^19",
-    "@types/react-dom": "^19",
-    "@tailwindcss/postcss": "^4",
-    "tailwindcss": "^4",
-    "eslint": "^9",
-    "eslint-config-next": "15.3.5",
-    "@eslint/eslintrc": "^3"
-  }
-}
+    "concurrently": "^8.2.2"
+  },
+  "keywords": ["nextjs", "fastapi", "fullstack"],
+  "author": "Jonathan Frey",
+  "license": "MIT"
+} 
