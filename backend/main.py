@@ -1,12 +1,20 @@
-from fastapi import FastAPI, Depends, HTTPException
+import os
+from fastapi import FastAPI, Depends, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 import uvicorn
-
+from sqlalchemy.exc import IntegrityError
 from database import engine, get_db
 from models import Base, SavedYouTubeChannel
 from schemas import SavedYouTubeChannelCreate, SavedYouTubeChannel as SavedYouTubeChannelSchema
+import requests
+from dotenv import load_dotenv
+
+# Load environment variables
+load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
+
+YOUTUBE_API_KEY = os.getenv("YOUTUBE_API_KEY")
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -53,18 +61,90 @@ async def hello():
 def add_youtube_channel(channel: SavedYouTubeChannelCreate, db: Session = Depends(get_db)):
     """Add a new YouTube channel"""
     db_channel = SavedYouTubeChannel(
-        name=channel.channel_id,
-        youtube_channel_id=channel.channel_id
+        name=channel.name,
+        youtube_channel_id=channel.youtube_channel_id
     )
-    db.add(db_channel)
-    db.commit()
-    db.refresh(db_channel)
-    return db_channel
+    try:
+        db.add(db_channel)
+        db.commit()
+        db.refresh(db_channel)
+        return db_channel
+    except IntegrityError:
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Channel already saved.")
 
 @app.get("/api/youtube-channels/", response_model=list[SavedYouTubeChannelSchema])
 def get_youtube_channels(db: Session = Depends(get_db)):
     """Get all saved YouTube channels"""
     return db.query(SavedYouTubeChannel).all()
+
+@app.get("/api/youtube-search/")
+def youtube_search(q: str = Query(..., min_length=2)):
+    if not YOUTUBE_API_KEY:
+        raise HTTPException(status_code=500, detail="YouTube API key not configured.")
+    base_url = "https://www.googleapis.com/youtube/v3/channels"
+    # Handle: starts with @
+    if q.startswith("@"):
+        params = {
+            "part": "snippet",
+            "forHandle": q[1:],
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 1,
+        }
+        r = requests.get(base_url, params=params)
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail="YouTube API error.")
+        data = r.json()
+        results = [
+            {
+                "name": item["snippet"]["title"],
+                "youtube_channel_id": item["id"]
+            }
+            for item in data.get("items", [])
+        ]
+        return results
+    # Channel ID: starts with UC
+    elif q.startswith("UC") and len(q) >= 24:
+        params = {
+            "part": "snippet",
+            "id": q,
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 1,
+        }
+        r = requests.get(base_url, params=params)
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail="YouTube API error.")
+        data = r.json()
+        results = [
+            {
+                "name": item["snippet"]["title"],
+                "youtube_channel_id": item["id"]
+            }
+            for item in data.get("items", [])
+        ]
+        return results
+    # Fallback: keyword search (as before)
+    else:
+        url = "https://www.googleapis.com/youtube/v3/search"
+        params = {
+            "part": "snippet",
+            "type": "channel",
+            "q": q,
+            "key": YOUTUBE_API_KEY,
+            "maxResults": 8,
+        }
+        r = requests.get(url, params=params)
+        if r.status_code != 200:
+            raise HTTPException(status_code=502, detail="YouTube API error.")
+        data = r.json()
+        results = [
+            {
+                "name": item["snippet"]["channelTitle"],
+                "youtube_channel_id": item["snippet"]["channelId"]
+            }
+            for item in data.get("items", [])
+        ]
+        return results
 
 if __name__ == "__main__":
     uvicorn.run(

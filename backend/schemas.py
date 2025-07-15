@@ -5,7 +5,8 @@ class SavedYouTubeChannelBase(BaseModel):
     youtube_channel_id: str
 
 class SavedYouTubeChannelCreate(BaseModel):
-    channel_id: str
+    name: str
+    youtube_channel_id: str
 
 class SavedYouTubeChannel(SavedYouTubeChannelBase):
     id: int
